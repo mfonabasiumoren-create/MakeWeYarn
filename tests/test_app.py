@@ -1,4 +1,6 @@
-﻿import unittest
+﻿
+import unittest
+from unittest.mock import patch
 
 from app.app import app
 
@@ -16,11 +18,134 @@ class MakeWeYarnAPITests(unittest.TestCase):
         self.assertEqual(response.get_json()["application"], "MakeWeYarn")
         self.assertEqual(response.get_json()["status"], "running")
 
-    def test_health_endpoint(self):
+    @patch("app.app.get_db_connection")
+    def test_health_endpoint(self, mock_connection):
         response = self.client.get("/health")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["status"], "healthy")
+        self.assertEqual(response.get_json()["database"], "connected")
+        mock_connection.assert_called_once()
+
+    def test_create_subscriber_missing_phone_number(self):
+        response = self.client.post(
+            "/subscribers",
+            json={"full_name": "Test Subscriber"}
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("phone_number", response.get_json()["error"])
+
+    def test_create_subscriber_missing_full_name(self):
+        response = self.client.post(
+            "/subscribers",
+            json={"phone_number": "+2348012345678"}
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full_name", response.get_json()["error"])
+
+    def test_create_subscriber_invalid_json(self):
+        response = self.client.post(
+            "/subscribers",
+            data="not-json",
+            content_type="text/plain"
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    @patch("app.app.get_db_connection")
+    def test_create_subscriber_success(self, mock_connection):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        subscriber = {
+            "id": 1,
+            "phone_number": "+2348012345678",
+            "full_name": "Test Subscriber",
+            "status": "active",
+            "created_at": datetime.now(timezone.utc),
+        }
+
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchone.return_value = subscriber
+        mock_connection.return_value.__enter__.return_value = mock_conn
+
+        response = self.client.post(
+            "/subscribers",
+            json={
+                "phone_number": "+2348012345678",
+                "full_name": "Test Subscriber"
+            }
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["id"], 1)
+        self.assertEqual(response.get_json()["status"], "active")
+        mock_conn.execute.assert_called_once()
+
+    @patch("app.app.get_db_connection")
+    def test_create_subscriber_duplicate_phone_number(self, mock_connection):
+        import psycopg
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = psycopg.errors.UniqueViolation(
+            "duplicate phone number"
+        )
+        mock_connection.return_value.__enter__.return_value = mock_conn
+
+        response = self.client.post(
+            "/subscribers",
+            json={
+                "phone_number": "+2348012345678",
+                "full_name": "Test Subscriber"
+            }
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.get_json()["error"])
+
+    @patch("app.app.get_db_connection")
+    def test_list_subscribers_success(self, mock_connection):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        subscribers = [
+            {
+                "id": 1,
+                "phone_number": "+2348012345678",
+                "full_name": "Test Subscriber",
+                "status": "active",
+                "created_at": datetime.now(timezone.utc),
+            }
+        ]
+
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = subscribers
+        mock_connection.return_value.__enter__.return_value = mock_conn
+
+        response = self.client.get("/subscribers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()), 1)
+        self.assertEqual(
+            response.get_json()[0]["phone_number"],
+            "+2348012345678"
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_list_subscribers_empty(self, mock_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value.fetchall.return_value = []
+        mock_connection.return_value.__enter__.return_value = mock_conn
+
+        response = self.client.get("/subscribers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), [])
 
 
 if __name__ == "__main__":
