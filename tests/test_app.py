@@ -578,5 +578,106 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Service plan not found."
         )
 
+    @patch("app.app.get_db_connection")
+    def test_update_plan_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "name": "Starter Data Plan",
+            "plan_type": "data",
+            "price_ngn": Decimal("1800.00"),
+            "data_allowance_mb": 4096,
+            "voice_minutes": 0,
+            "is_active": True,
+            "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+        }
+
+        response = self.client.patch(
+            "/plans/1",
+            json={
+                "price_ngn": 1800,
+                "data_allowance_mb": 4096,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertEqual(response.json["price_ngn"], 1800.0)
+        self.assertEqual(response.json["data_allowance_mb"], 4096)
+        self.assertEqual(response.json["name"], "Starter Data Plan")
+
+    def test_update_plan_disallowed_field(self):
+        response = self.client.patch(
+            "/plans/1",
+            json={"is_active": False},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "One or more fields are not allowed."
+        )
+
+    def test_update_plan_negative_price(self):
+        response = self.client.patch(
+            "/plans/1",
+            json={"price_ngn": -500},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "price_ngn must be a non-negative number."
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_update_plan_duplicate_name(self, mock_get_db_connection):
+        import psycopg
+
+        mock_conn = mock_get_db_connection.return_value.__enter__.return_value
+        mock_conn.execute.side_effect = psycopg.errors.UniqueViolation(
+            "duplicate plan name"
+        )
+
+        response = self.client.patch(
+            "/plans/1",
+            json={"name": "Existing Plan"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json["error"],
+            "A plan with this name already exists."
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_update_plan_not_found(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = None
+
+        response = self.client.patch(
+            "/plans/9999",
+            json={"price_ngn": 1800},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json["error"],
+            "Service plan not found."
+        )
+
 if __name__ == "__main__":
     unittest.main()

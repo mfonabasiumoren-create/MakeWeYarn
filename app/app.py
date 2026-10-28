@@ -405,5 +405,134 @@ def update_plan_status(plan_id):
             "error": "Unable to update service plan status."
         }), 500
 
+@app.route("/plans/<int:plan_id>", methods=["PATCH"])
+def update_plan(plan_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict) or not data:
+        return jsonify({
+            "error": "A non-empty JSON object is required."
+        }), 400
+
+    allowed_fields = {
+        "name",
+        "plan_type",
+        "price_ngn",
+        "data_allowance_mb",
+        "voice_minutes",
+    }
+
+    if not set(data).issubset(allowed_fields):
+        return jsonify({
+            "error": "One or more fields are not allowed."
+        }), 400
+
+    updates = {}
+
+    if "name" in data:
+        name = data["name"]
+
+        if not isinstance(name, str) or not name.strip():
+            return jsonify({"error": "name is required."}), 400
+
+        name = name.strip()
+
+        if len(name) > 100:
+            return jsonify({
+                "error": "name must not exceed 100 characters."
+            }), 400
+
+        updates["name"] = name
+
+    if "plan_type" in data:
+        if data["plan_type"] not in ("data", "voice", "combo"):
+            return jsonify({
+                "error": "plan_type must be data, voice, or combo."
+            }), 400
+
+        updates["plan_type"] = data["plan_type"]
+
+    if "price_ngn" in data:
+        price = data["price_ngn"]
+
+        if (
+            isinstance(price, bool)
+            or not isinstance(price, (int, float))
+            or price < 0
+        ):
+            return jsonify({
+                "error": "price_ngn must be a non-negative number."
+            }), 400
+
+        updates["price_ngn"] = price
+
+    if "data_allowance_mb" in data:
+        allowance = data["data_allowance_mb"]
+
+        if (
+            isinstance(allowance, bool)
+            or not isinstance(allowance, int)
+            or allowance < 0
+        ):
+            return jsonify({
+                "error": "data_allowance_mb must be a non-negative integer."
+            }), 400
+
+        updates["data_allowance_mb"] = allowance
+
+    if "voice_minutes" in data:
+        minutes = data["voice_minutes"]
+
+        if (
+            isinstance(minutes, bool)
+            or not isinstance(minutes, int)
+            or minutes < 0
+        ):
+            return jsonify({
+                "error": "voice_minutes must be a non-negative integer."
+            }), 400
+
+        updates["voice_minutes"] = minutes
+
+    fields_sql = ", ".join(
+        f"{field} = %s" for field in updates
+    )
+    values = list(updates.values()) + [plan_id]
+
+    try:
+        with get_db_connection() as conn:
+            plan = conn.execute(
+                f"""
+                UPDATE plans
+                SET {fields_sql}
+                WHERE id = %s
+                RETURNING id, name, plan_type, price_ngn,
+                          data_allowance_mb, voice_minutes,
+                          is_active, created_at
+                """,
+                values,
+            ).fetchone()
+
+        if plan is None:
+            return jsonify({
+                "error": "Service plan not found."
+            }), 404
+
+        plan["price_ngn"] = float(plan["price_ngn"])
+        plan["created_at"] = plan["created_at"].isoformat()
+
+        return jsonify(plan), 200
+
+    except psycopg.errors.UniqueViolation:
+        return jsonify({
+            "error": "A plan with this name already exists."
+        }), 409
+
+    except psycopg.Error:
+        app.logger.exception("Failed to update service plan")
+        return jsonify({
+            "error": "Unable to update service plan."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
