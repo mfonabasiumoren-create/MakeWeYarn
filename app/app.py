@@ -328,5 +328,36 @@ def list_plans():
             "error": "Unable to retrieve service plans."
         }), 500
 
+@app.route("/plans/<int:plan_id>", methods=["GET"])
+def get_plan(plan_id):
+    try:
+        with get_db_connection() as conn:
+            plan = conn.execute(
+                """
+                SELECT id, name, plan_type, price_ngn,
+                       data_allowance_mb, voice_minutes,
+                       is_active, created_at
+                FROM plans
+                WHERE id = %s
+                """,
+                (plan_id,),
+            ).fetchone()
+
+        if plan is None:
+            return jsonify({
+                "error": "Service plan not found."
+            }), 404
+
+        plan["price_ngn"] = float(plan["price_ngn"])
+        plan["created_at"] = plan["created_at"].isoformat()
+
+        return jsonify(plan), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to retrieve service plan")
+        return jsonify({
+            "error": "Unable to retrieve service plan."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

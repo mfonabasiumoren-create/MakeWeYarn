@@ -433,5 +433,53 @@ class MakeWeYarnAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json, [])
 
+    @patch("app.app.get_db_connection")
+    def test_get_plan_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "name": "Starter Data Plan",
+            "plan_type": "data",
+            "price_ngn": Decimal("1500.00"),
+            "data_allowance_mb": 2048,
+            "voice_minutes": 0,
+            "is_active": True,
+            "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+        }
+
+        response = self.client.get("/plans/1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertEqual(response.json["name"], "Starter Data Plan")
+        self.assertEqual(response.json["price_ngn"], 1500.0)
+        self.assertEqual(response.json["data_allowance_mb"], 2048)
+
+    @patch("app.app.get_db_connection")
+    def test_get_plan_not_found(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = None
+
+        response = self.client.get("/plans/9999")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json["error"],
+            "Service plan not found."
+        )
+
 if __name__ == "__main__":
     unittest.main()
