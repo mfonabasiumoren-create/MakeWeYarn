@@ -534,5 +534,83 @@ def update_plan(plan_id):
             "error": "Unable to update service plan."
         }), 500
 
+@app.route("/subscriptions", methods=["POST"])
+def create_subscription():
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "A valid JSON object is required."
+        }), 400
+
+    subscriber_id = data.get("subscriber_id")
+    plan_id = data.get("plan_id")
+
+    if (
+        isinstance(subscriber_id, bool)
+        or not isinstance(subscriber_id, int)
+        or subscriber_id <= 0
+    ):
+        return jsonify({
+            "error": "subscriber_id must be a positive integer."
+        }), 400
+
+    if (
+        isinstance(plan_id, bool)
+        or not isinstance(plan_id, int)
+        or plan_id <= 0
+    ):
+        return jsonify({
+            "error": "plan_id must be a positive integer."
+        }), 400
+
+    try:
+        with get_db_connection() as conn:
+            subscriber = conn.execute(
+                "SELECT id FROM subscribers WHERE id = %s",
+                (subscriber_id,),
+            ).fetchone()
+
+            if subscriber is None:
+                return jsonify({
+                    "error": "Subscriber not found."
+                }), 404
+
+            plan = conn.execute(
+                "SELECT id, is_active FROM plans WHERE id = %s",
+                (plan_id,),
+            ).fetchone()
+
+            if plan is None:
+                return jsonify({
+                    "error": "Service plan not found."
+                }), 404
+
+            if not plan["is_active"]:
+                return jsonify({
+                    "error": "Cannot subscribe to an inactive service plan."
+                }), 400
+
+            subscription = conn.execute(
+                """
+                INSERT INTO subscriptions (subscriber_id, plan_id)
+                VALUES (%s, %s)
+                RETURNING id, subscriber_id, plan_id, status, created_at
+                """,
+                (subscriber_id, plan_id),
+            ).fetchone()
+
+        subscription["created_at"] = (
+            subscription["created_at"].isoformat()
+        )
+
+        return jsonify(subscription), 201
+
+    except psycopg.Error:
+        app.logger.exception("Failed to create subscription")
+        return jsonify({
+            "error": "Unable to create subscription."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
