@@ -138,5 +138,76 @@ def list_subscribers():
         }), 500
 
 
+@app.route("/subscribers/<int:subscriber_id>", methods=["GET"])
+def get_subscriber(subscriber_id):
+    try:
+        with get_db_connection() as conn:
+            subscriber = conn.execute(
+                """
+                SELECT id, phone_number, full_name, status, created_at
+                FROM subscribers
+                WHERE id = %s
+                """,
+                (subscriber_id,),
+            ).fetchone()
+
+        if subscriber is None:
+            return jsonify({
+                "error": "Subscriber not found."
+            }), 404
+
+        subscriber["created_at"] = subscriber["created_at"].isoformat()
+
+        return jsonify(subscriber), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to retrieve subscriber")
+        return jsonify({
+            "error": "Unable to retrieve subscriber."
+        }), 500
+
+@app.route("/subscribers/<int:subscriber_id>/status", methods=["PATCH"])
+def update_subscriber_status(subscriber_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "A valid JSON object is required."
+        }), 400
+
+    status = data.get("status")
+
+    if status not in ("active", "suspended"):
+        return jsonify({
+            "error": "status must be either 'active' or 'suspended'."
+        }), 400
+
+    try:
+        with get_db_connection() as conn:
+            subscriber = conn.execute(
+                """
+                UPDATE subscribers
+                SET status = %s
+                WHERE id = %s
+                RETURNING id, phone_number, full_name, status, created_at
+                """,
+                (status, subscriber_id),
+            ).fetchone()
+
+        if subscriber is None:
+            return jsonify({
+                "error": "Subscriber not found."
+            }), 404
+
+        subscriber["created_at"] = subscriber["created_at"].isoformat()
+
+        return jsonify(subscriber), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to update subscriber status")
+        return jsonify({
+            "error": "Unable to update subscriber status."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
