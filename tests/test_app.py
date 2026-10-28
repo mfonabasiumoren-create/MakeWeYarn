@@ -481,5 +481,102 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Service plan not found."
         )
 
+    @patch("app.app.get_db_connection")
+    def test_deactivate_plan_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "name": "Starter Data Plan",
+            "plan_type": "data",
+            "price_ngn": Decimal("1500.00"),
+            "data_allowance_mb": 2048,
+            "voice_minutes": 0,
+            "is_active": False,
+            "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+        }
+
+        response = self.client.patch(
+            "/plans/1/status",
+            json={"is_active": False},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertFalse(response.json["is_active"])
+        self.assertEqual(response.json["name"], "Starter Data Plan")
+
+    @patch("app.app.get_db_connection")
+    def test_reactivate_plan_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "name": "Starter Data Plan",
+            "plan_type": "data",
+            "price_ngn": Decimal("1500.00"),
+            "data_allowance_mb": 2048,
+            "voice_minutes": 0,
+            "is_active": True,
+            "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+        }
+
+        response = self.client.patch(
+            "/plans/1/status",
+            json={"is_active": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertTrue(response.json["is_active"])
+        self.assertEqual(response.json["name"], "Starter Data Plan")
+
+    def test_update_plan_status_invalid_value(self):
+        response = self.client.patch(
+            "/plans/1/status",
+            json={"is_active": "inactive"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "is_active must be either true or false."
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_update_plan_status_not_found(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = None
+
+        response = self.client.patch(
+            "/plans/9999/status",
+            json={"is_active": False},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json["error"],
+            "Service plan not found."
+        )
+
 if __name__ == "__main__":
     unittest.main()

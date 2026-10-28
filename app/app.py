@@ -359,5 +359,51 @@ def get_plan(plan_id):
             "error": "Unable to retrieve service plan."
         }), 500
 
+@app.route("/plans/<int:plan_id>/status", methods=["PATCH"])
+def update_plan_status(plan_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "A valid JSON object is required."
+        }), 400
+
+    is_active = data.get("is_active")
+
+    if not isinstance(is_active, bool):
+        return jsonify({
+            "error": "is_active must be either true or false."
+        }), 400
+
+    try:
+        with get_db_connection() as conn:
+            plan = conn.execute(
+                """
+                UPDATE plans
+                SET is_active = %s
+                WHERE id = %s
+                RETURNING id, name, plan_type, price_ngn,
+                          data_allowance_mb, voice_minutes,
+                          is_active, created_at
+                """,
+                (is_active, plan_id),
+            ).fetchone()
+
+        if plan is None:
+            return jsonify({
+                "error": "Service plan not found."
+            }), 404
+
+        plan["price_ngn"] = float(plan["price_ngn"])
+        plan["created_at"] = plan["created_at"].isoformat()
+
+        return jsonify(plan), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to update service plan status")
+        return jsonify({
+            "error": "Unable to update service plan status."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
