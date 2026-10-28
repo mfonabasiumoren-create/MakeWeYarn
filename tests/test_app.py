@@ -263,6 +263,175 @@ class MakeWeYarnAPITests(unittest.TestCase):
             response.get_json()["error"],
             "Subscriber not found."
         )
+    @patch("app.app.get_db_connection")
+    def test_create_plan_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "name": "Starter Data Plan",
+            "plan_type": "data",
+            "price_ngn": Decimal("1500.00"),
+            "data_allowance_mb": 2048,
+            "voice_minutes": 0,
+            "is_active": True,
+            "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+        }
+
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Starter Data Plan",
+                "plan_type": "data",
+                "price_ngn": 1500,
+                "data_allowance_mb": 2048,
+                "voice_minutes": 0,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json["name"], "Starter Data Plan")
+        self.assertEqual(response.json["plan_type"], "data")
+        self.assertEqual(response.json["price_ngn"], 1500.0)
+    def test_create_plan_invalid_plan_type(self):
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Invalid Plan",
+                "plan_type": "unlimited",
+                "price_ngn": 1500,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "plan_type must be data, voice, or combo."
+        )
+    @patch("app.app.get_db_connection")
+    def test_create_plan_duplicate_name(self, mock_get_db_connection):
+        import psycopg
+
+        mock_conn = mock_get_db_connection.return_value.__enter__.return_value
+        mock_conn.execute.side_effect = psycopg.errors.UniqueViolation(
+            "duplicate plan name"
+        )
+
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Starter Data Plan",
+                "plan_type": "data",
+                "price_ngn": 1500,
+                "data_allowance_mb": 2048,
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json["error"],
+            "A plan with this name already exists."
+        )
+    def test_create_plan_negative_price(self):
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Negative Price Plan",
+                "plan_type": "data",
+                "price_ngn": -500,
+                "data_allowance_mb": 1024,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "price_ngn must be a non-negative number."
+        )
+    def test_create_plan_negative_data_allowance(self):
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Invalid Data Plan",
+                "plan_type": "data",
+                "price_ngn": 1000,
+                "data_allowance_mb": -100,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "data_allowance_mb must be a non-negative integer."
+        )
+    def test_create_plan_negative_voice_minutes(self):
+        response = self.client.post(
+            "/plans",
+            json={
+                "name": "Invalid Voice Plan",
+                "plan_type": "voice",
+                "price_ngn": 500,
+                "voice_minutes": -30,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "voice_minutes must be a non-negative integer."
+        )
+    @patch("app.app.get_db_connection")
+    def test_list_plans_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchall.return_value = [
+            {
+                "id": 1,
+                "name": "Starter Data Plan",
+                "plan_type": "data",
+                "price_ngn": Decimal("1500.00"),
+                "data_allowance_mb": 2048,
+                "voice_minutes": 0,
+                "is_active": True,
+                "created_at": datetime(2026, 10, 28, tzinfo=timezone.utc),
+            }
+        ]
+
+        response = self.client.get("/plans")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json), 1)
+        self.assertEqual(response.json[0]["name"], "Starter Data Plan")
+        self.assertEqual(response.json[0]["price_ngn"], 1500.0)
+        self.assertEqual(response.json[0]["data_allowance_mb"], 2048)
+    @patch("app.app.get_db_connection")
+    def test_list_plans_empty(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = []
+
+        response = self.client.get("/plans")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, [])
 
 if __name__ == "__main__":
     unittest.main()

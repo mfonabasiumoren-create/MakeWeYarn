@@ -209,5 +209,124 @@ def update_subscriber_status(subscriber_id):
             "error": "Unable to update subscriber status."
         }), 500
 
+@app.route("/plans", methods=["POST"])
+def create_plan():
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "A valid JSON object is required."
+        }), 400
+
+    name = data.get("name")
+    plan_type = data.get("plan_type")
+    price_ngn = data.get("price_ngn")
+    data_allowance_mb = data.get("data_allowance_mb", 0)
+    voice_minutes = data.get("voice_minutes", 0)
+
+    if not isinstance(name, str) or not name.strip():
+        return jsonify({"error": "name is required."}), 400
+
+    name = name.strip()
+
+    if len(name) > 100:
+        return jsonify({
+            "error": "name must not exceed 100 characters."
+        }), 400
+
+    if plan_type not in ("data", "voice", "combo"):
+        return jsonify({
+            "error": "plan_type must be data, voice, or combo."
+        }), 400
+
+    if (
+        isinstance(price_ngn, bool)
+        or not isinstance(price_ngn, (int, float))
+        or price_ngn < 0
+    ):
+        return jsonify({
+            "error": "price_ngn must be a non-negative number."
+        }), 400
+
+    if (
+        isinstance(data_allowance_mb, bool)
+        or not isinstance(data_allowance_mb, int)
+        or data_allowance_mb < 0
+    ):
+        return jsonify({
+            "error": "data_allowance_mb must be a non-negative integer."
+        }), 400
+
+    if (
+        isinstance(voice_minutes, bool)
+        or not isinstance(voice_minutes, int)
+        or voice_minutes < 0
+    ):
+        return jsonify({
+            "error": "voice_minutes must be a non-negative integer."
+        }), 400
+
+    try:
+        with get_db_connection() as conn:
+            plan = conn.execute(
+                """
+                INSERT INTO plans (
+                    name, plan_type, price_ngn,
+                    data_allowance_mb, voice_minutes
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, name, plan_type, price_ngn,
+                          data_allowance_mb, voice_minutes,
+                          is_active, created_at
+                """,
+                (
+                    name, plan_type, price_ngn,
+                    data_allowance_mb, voice_minutes
+                ),
+            ).fetchone()
+
+        plan["price_ngn"] = float(plan["price_ngn"])
+        plan["created_at"] = plan["created_at"].isoformat()
+
+        return jsonify(plan), 201
+
+    except psycopg.errors.UniqueViolation:
+        return jsonify({
+            "error": "A plan with this name already exists."
+        }), 409
+
+    except psycopg.Error:
+        app.logger.exception("Failed to create service plan")
+        return jsonify({
+            "error": "Unable to create service plan."
+        }), 500
+
+
+@app.route("/plans", methods=["GET"])
+def list_plans():
+    try:
+        with get_db_connection() as conn:
+            plans = conn.execute(
+                """
+                SELECT id, name, plan_type, price_ngn,
+                       data_allowance_mb, voice_minutes,
+                       is_active, created_at
+                FROM plans
+                ORDER BY id
+                """
+            ).fetchall()
+
+        for plan in plans:
+            plan["price_ngn"] = float(plan["price_ngn"])
+            plan["created_at"] = plan["created_at"].isoformat()
+
+        return jsonify(plans), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to retrieve service plans")
+        return jsonify({
+            "error": "Unable to retrieve service plans."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
