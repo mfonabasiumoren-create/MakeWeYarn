@@ -835,5 +835,72 @@ class MakeWeYarnAPITests(unittest.TestCase):
 
         self.assertEqual(mock_conn.execute.call_count, 2)
 
+    @patch("app.app.get_db_connection")
+    def test_get_subscriptions_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchall.return_value = [
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "subscriber_name": "Test Subscriber",
+                "phone_number": "+2348012345678",
+                "plan_id": 1,
+                "plan_name": "Starter Data Plan",
+                "status": "active",
+                "created_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+            }
+        ]
+
+        response = self.client.get("/subscriptions")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json), 1)
+        self.assertEqual(response.json[0]["id"], 1)
+        self.assertEqual(
+            response.json[0]["subscriber_name"],
+            "Test Subscriber",
+        )
+        self.assertEqual(
+            response.json[0]["plan_name"],
+            "Starter Data Plan",
+        )
+        self.assertEqual(response.json[0]["status"], "active")
+        self.assertEqual(
+            response.json[0]["created_at"],
+            "2026-10-28T13:25:32+00:00",
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_get_subscriptions_database_error(
+        self, mock_get_db_connection
+    ):
+        import psycopg
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+
+        mock_conn.execute.side_effect = psycopg.OperationalError(
+            "Simulated database failure"
+        )
+
+        response = self.client.get("/subscriptions")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json["error"],
+            "Unable to retrieve subscriptions."
+        )
+
 if __name__ == "__main__":
     unittest.main()

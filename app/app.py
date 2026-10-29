@@ -612,5 +612,42 @@ def create_subscription():
             "error": "Unable to create subscription."
         }), 500
 
+@app.route("/subscriptions", methods=["GET"])
+def get_subscriptions():
+    try:
+        with get_db_connection() as conn:
+            subscriptions = conn.execute(
+                """
+                SELECT
+                    s.id,
+                    s.subscriber_id,
+                    sub.full_name AS subscriber_name,
+                    sub.phone_number,
+                    s.plan_id,
+                    p.name AS plan_name,
+                    s.status,
+                    s.created_at
+                FROM subscriptions AS s
+                JOIN subscribers AS sub
+                    ON s.subscriber_id = sub.id
+                JOIN plans AS p
+                    ON s.plan_id = p.id
+                ORDER BY s.id
+                """
+            ).fetchall()
+
+        for subscription in subscriptions:
+            subscription["created_at"] = (
+                subscription["created_at"].isoformat()
+            )
+
+        return jsonify(subscriptions), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to retrieve subscriptions")
+        return jsonify({
+            "error": "Unable to retrieve subscriptions."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
