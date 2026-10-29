@@ -649,5 +649,47 @@ def get_subscriptions():
             "error": "Unable to retrieve subscriptions."
         }), 500
 
+@app.route("/subscriptions/<int:subscription_id>", methods=["GET"])
+def get_subscription(subscription_id):
+    try:
+        with get_db_connection() as conn:
+            subscription = conn.execute(
+                """
+                SELECT
+                    s.id,
+                    s.subscriber_id,
+                    sub.full_name AS subscriber_name,
+                    sub.phone_number,
+                    s.plan_id,
+                    p.name AS plan_name,
+                    s.status,
+                    s.created_at
+                FROM subscriptions AS s
+                JOIN subscribers AS sub
+                    ON s.subscriber_id = sub.id
+                JOIN plans AS p
+                    ON s.plan_id = p.id
+                WHERE s.id = %s
+                """,
+                (subscription_id,),
+            ).fetchone()
+
+        if subscription is None:
+            return jsonify({
+                "error": "Subscription not found."
+            }), 404
+
+        subscription["created_at"] = (
+            subscription["created_at"].isoformat()
+        )
+
+        return jsonify(subscription), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to retrieve subscription")
+        return jsonify({
+            "error": "Unable to retrieve subscription."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

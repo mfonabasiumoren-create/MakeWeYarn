@@ -902,5 +902,66 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Unable to retrieve subscriptions."
         )
 
+    @patch("app.app.get_db_connection")
+    def test_get_subscription_success(self, mock_get_db_connection):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "subscriber_id": 1,
+            "subscriber_name": "Test Subscriber",
+            "phone_number": "+2348012345678",
+            "plan_id": 1,
+            "plan_name": "Starter Data Plan",
+            "status": "active",
+            "created_at": datetime(
+                2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+            ),
+        }
+
+        response = self.client.get("/subscriptions/1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertEqual(
+            response.json["subscriber_name"],
+            "Test Subscriber",
+        )
+        self.assertEqual(
+            response.json["plan_name"],
+            "Starter Data Plan",
+        )
+        self.assertEqual(response.json["status"], "active")
+        self.assertEqual(
+            response.json["created_at"],
+            "2026-10-28T13:25:32+00:00",
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_get_subscription_not_found(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = None
+
+        response = self.client.get("/subscriptions/9999")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json["error"],
+            "Subscription not found.",
+        )
+
 if __name__ == "__main__":
     unittest.main()
