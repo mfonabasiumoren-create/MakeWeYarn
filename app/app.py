@@ -691,5 +691,53 @@ def get_subscription(subscription_id):
             "error": "Unable to retrieve subscription."
         }), 500
 
+@app.route(
+    "/subscriptions/<int:subscription_id>/status",
+    methods=["PATCH"],
+)
+def update_subscription_status(subscription_id):
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "error": "A valid JSON object is required."
+        }), 400
+
+    status = data.get("status")
+
+    if status not in ("active", "cancelled"):
+        return jsonify({
+            "error": "status must be either 'active' or 'cancelled'."
+        }), 400
+
+    try:
+        with get_db_connection() as conn:
+            subscription = conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = %s
+                WHERE id = %s
+                RETURNING id, subscriber_id, plan_id, status, created_at
+                """,
+                (status, subscription_id),
+            ).fetchone()
+
+        if subscription is None:
+            return jsonify({
+                "error": "Subscription not found."
+            }), 404
+
+        subscription["created_at"] = (
+            subscription["created_at"].isoformat()
+        )
+
+        return jsonify(subscription), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to update subscription status")
+        return jsonify({
+            "error": "Unable to update subscription status."
+        }), 500
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)

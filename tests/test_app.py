@@ -963,5 +963,81 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Subscription not found.",
         )
 
+    @patch("app.app.get_db_connection")
+    def test_update_subscription_status_success(
+        self, mock_get_db_connection
+    ):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.return_value = {
+            "id": 1,
+            "subscriber_id": 1,
+            "plan_id": 1,
+            "status": "cancelled",
+            "created_at": datetime(
+                2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+            ),
+        }
+
+        response = self.client.patch(
+            "/subscriptions/1/status",
+            json={"status": "cancelled"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertEqual(response.json["status"], "cancelled")
+        self.assertEqual(
+            response.json["created_at"],
+            "2026-10-28T13:25:32+00:00",
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_update_subscription_status_invalid(
+        self, mock_get_db_connection
+    ):
+        response = self.client.patch(
+            "/subscriptions/1/status",
+            json={"status": "pending"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "status must be either 'active' or 'cancelled'.",
+        )
+        mock_get_db_connection.assert_not_called()
+
+    @patch("app.app.get_db_connection")
+    def test_update_subscription_status_not_found(
+        self, mock_get_db_connection
+    ):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = None
+
+        response = self.client.patch(
+            "/subscriptions/9999/status",
+            json={"status": "cancelled"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json["error"],
+            "Subscription not found.",
+        )
+
 if __name__ == "__main__":
     unittest.main()
