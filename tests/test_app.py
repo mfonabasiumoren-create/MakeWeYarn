@@ -1,4 +1,4 @@
-﻿
+
 import unittest
 from unittest.mock import patch
 
@@ -1060,7 +1060,7 @@ class MakeWeYarnAPITests(unittest.TestCase):
         mock_conn.execute.assert_called_once()
         self.assertEqual(
             mock_conn.execute.call_args[0][1],
-            ("active", "active"),
+            ("active", "active", 10, 0),
         )
 
     @patch("app.app.get_db_connection")
@@ -1084,7 +1084,7 @@ class MakeWeYarnAPITests(unittest.TestCase):
         mock_conn.execute.assert_called_once()
         self.assertEqual(
             mock_conn.execute.call_args[0][1],
-            ("cancelled", "cancelled"),
+            ("cancelled", "cancelled", 10, 0),
         )
 
     @patch("app.app.get_db_connection")

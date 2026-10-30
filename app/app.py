@@ -616,6 +616,18 @@ def create_subscription():
 @app.route("/subscriptions", methods=["GET"])
 def get_subscriptions():
     status = request.args.get("status")
+    limit = request.args.get("limit", default=10, type=int)
+    offset = request.args.get("offset", default=0, type=int)
+
+    if limit < 1 or limit > 100:
+        return jsonify({
+            "error": "limit must be between 1 and 100."
+        }), 400
+
+    if offset < 0:
+        return jsonify({
+            "error": "offset cannot be negative."
+        }), 400
 
     if status is not None and status not in ("active", "cancelled"):
         return jsonify({
@@ -643,12 +655,12 @@ def get_subscriptions():
                     ON s.plan_id = p.id
 
                WHERE (%s::VARCHAR IS NULL OR s.status = %s)
-                ORDER BY s.id
+               ORDER BY s.id
+               LIMIT %s
+               OFFSET %s
                 """,
-                (status, status),
+                (status, status, limit, offset),
             ).fetchall()
-
-
         for subscription in subscriptions:
             subscription["created_at"] = (
                 subscription["created_at"].isoformat()
