@@ -612,9 +612,18 @@ def create_subscription():
             "error": "Unable to create subscription."
         }), 500
 
+
 @app.route("/subscriptions", methods=["GET"])
 def get_subscriptions():
+    status = request.args.get("status")
+
+    if status is not None and status not in ("active", "cancelled"):
+        return jsonify({
+            "error": "status must be either 'active' or 'cancelled'."
+        }), 400
+
     try:
+
         with get_db_connection() as conn:
             subscriptions = conn.execute(
                 """
@@ -632,9 +641,13 @@ def get_subscriptions():
                     ON s.subscriber_id = sub.id
                 JOIN plans AS p
                     ON s.plan_id = p.id
+
+               WHERE (%s::VARCHAR IS NULL OR s.status = %s)
                 ORDER BY s.id
-                """
+                """,
+                (status, status),
             ).fetchall()
+
 
         for subscription in subscriptions:
             subscription["created_at"] = (

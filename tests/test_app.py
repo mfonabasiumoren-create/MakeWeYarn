@@ -1039,5 +1039,67 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Subscription not found.",
         )
 
+    @patch("app.app.get_db_connection")
+    def test_get_subscriptions_filter_active(
+        self, mock_get_db_connection
+    ):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = []
+
+        response = self.client.get("/subscriptions?status=active")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, [])
+
+        mock_conn.execute.assert_called_once()
+        self.assertEqual(
+            mock_conn.execute.call_args[0][1],
+            ("active", "active"),
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_get_subscriptions_filter_cancelled(
+        self, mock_get_db_connection
+    ):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+        mock_cursor.fetchall.return_value = []
+
+        response = self.client.get("/subscriptions?status=cancelled")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, [])
+
+        mock_conn.execute.assert_called_once()
+        self.assertEqual(
+            mock_conn.execute.call_args[0][1],
+            ("cancelled", "cancelled"),
+        )
+
+    @patch("app.app.get_db_connection")
+    def test_get_subscriptions_filter_invalid_status(
+        self, mock_get_db_connection
+    ):
+        response = self.client.get("/subscriptions?status=pending")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "status must be either 'active' or 'cancelled'.",
+        )
+
+        mock_get_db_connection.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
