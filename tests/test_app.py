@@ -679,6 +679,7 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "Service plan not found."
         )
 
+
     @patch("app.app.get_db_connection")
     def test_create_subscription_success(self, mock_get_db_connection):
         from datetime import datetime, timezone
@@ -692,6 +693,7 @@ class MakeWeYarnAPITests(unittest.TestCase):
         mock_cursor.fetchone.side_effect = [
             {"id": 1},
             {"id": 1, "is_active": True},
+            None,
             {
                 "id": 1,
                 "subscriber_id": 1,
@@ -717,6 +719,94 @@ class MakeWeYarnAPITests(unittest.TestCase):
         self.assertEqual(response.json["plan_id"], 1)
         self.assertEqual(response.json["status"], "active")
 
+    @patch("app.app.get_db_connection")
+    def test_create_subscription_duplicate_active(
+        self, mock_get_db_connection
+    ):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.side_effect = [
+            {"id": 1},
+            {"id": 1, "is_active": True},
+            {"id": 1},
+        ]
+
+        response = self.client.post(
+            "/subscriptions",
+            json={
+                "subscriber_id": 1,
+                "plan_id": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json["error"],
+            "Subscriber already has an active subscription to this plan."
+        )
+        self.assertEqual(mock_conn.execute.call_count, 3)
+    @patch("app.app.get_db_connection")
+    def test_create_subscription_after_cancellation(
+        self, mock_get_db_connection
+    ):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.side_effect = [
+            {"id": 1},  # Subscriber exists
+            {"id": 1, "is_active": True},  # Plan is active
+            None,  # No active subscription exists
+            {
+                "id": 2,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "active",
+                "created_at": datetime(
+                    2026, 10, 30, tzinfo=timezone.utc
+                ),
+            },  # New subscription created
+        ]
+
+        response = self.client.post(
+            "/subscriptions",
+            json={
+                "subscriber_id": 1,
+                "plan_id": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json["id"], 2)
+        self.assertEqual(response.json["status"], "active")
+    def test_create_subscription_invalid_subscriber_id(self):
+        response = self.client.post(
+            "/subscriptions",
+            json={
+                "subscriber_id": "invalid",
+                "plan_id": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json["error"],
+            "subscriber_id must be a positive integer."
+        )
+
+    def test_create_subscription_invalid_subscriber_id(self):
+        # Existing invalid subscriber test
+        ...
     def test_create_subscription_invalid_subscriber_id(self):
         response = self.client.post(
             "/subscriptions",

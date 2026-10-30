@@ -534,6 +534,7 @@ def update_plan(plan_id):
             "error": "Unable to update service plan."
         }), 500
 
+
 @app.route("/subscriptions", methods=["POST"])
 def create_subscription():
     data = request.get_json(silent=True)
@@ -591,6 +592,22 @@ def create_subscription():
                     "error": "Cannot subscribe to an inactive service plan."
                 }), 400
 
+            existing_subscription = conn.execute(
+                """
+                SELECT id
+                FROM subscriptions
+                WHERE subscriber_id = %s
+                  AND plan_id = %s
+                  AND status = 'active'
+                """,
+                (subscriber_id, plan_id),
+            ).fetchone()
+
+            if existing_subscription is not None:
+                return jsonify({
+                    "error": "Subscriber already has an active subscription to this plan."
+                }), 409
+
             subscription = conn.execute(
                 """
                 INSERT INTO subscriptions (subscriber_id, plan_id)
@@ -611,7 +628,6 @@ def create_subscription():
         return jsonify({
             "error": "Unable to create subscription."
         }), 500
-
 
 @app.route("/subscriptions", methods=["GET"])
 def get_subscriptions():
