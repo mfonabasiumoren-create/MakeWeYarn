@@ -578,9 +578,13 @@ def create_subscription():
                 }), 404
 
             plan = conn.execute(
-                "SELECT id, is_active FROM plans WHERE id = %s",
-                (plan_id,),
-            ).fetchone()
+    """
+    SELECT id, is_active, duration_days
+    FROM plans
+    WHERE id = %s
+    """,
+    (plan_id,),
+).fetchone()
 
             if plan is None:
                 return jsonify({
@@ -609,17 +613,34 @@ def create_subscription():
                 }), 409
 
             subscription = conn.execute(
-                """
-                INSERT INTO subscriptions (subscriber_id, plan_id)
-                VALUES (%s, %s)
-                RETURNING id, subscriber_id, plan_id, status, created_at
-                """,
-                (subscriber_id, plan_id),
-            ).fetchone()
+    """
+    INSERT INTO subscriptions (
+        subscriber_id,
+        plan_id,
+        starts_at,
+        expires_at
+    )
+    VALUES (
+        %s,
+        %s,
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP + (%s * INTERVAL '1 day')
+    )
+    RETURNING
+        id,
+        subscriber_id,
+        plan_id,
+        status,
+        created_at,
+        starts_at,
+        expires_at
+    """,
+    (subscriber_id, plan_id, plan["duration_days"]),
+).fetchone()
 
-        subscription["created_at"] = (
-            subscription["created_at"].isoformat()
-        )
+        subscription["created_at"] = subscription["created_at"].isoformat()
+        subscription["starts_at"] = subscription["starts_at"].isoformat()
+        subscription["expires_at"] = subscription["expires_at"].isoformat()
 
         return jsonify(subscription), 201
 
@@ -663,7 +684,9 @@ def get_subscriptions():
                     s.plan_id,
                     p.name AS plan_name,
                     s.status,
-                    s.created_at
+                    s.created_at,
+                    s.starts_at,
+                    s.expires_at
                 FROM subscriptions AS s
                 JOIN subscribers AS sub
                     ON s.subscriber_id = sub.id
@@ -678,9 +701,9 @@ def get_subscriptions():
                 (status, status, limit, offset),
             ).fetchall()
         for subscription in subscriptions:
-            subscription["created_at"] = (
-                subscription["created_at"].isoformat()
-            )
+            subscription["created_at"] = subscription["created_at"].isoformat()
+            subscription["starts_at"] = subscription["starts_at"].isoformat()
+            subscription["expires_at"] = subscription["expires_at"].isoformat()
 
         return jsonify(subscriptions), 200
 
@@ -704,7 +727,9 @@ def get_subscription(subscription_id):
                     s.plan_id,
                     p.name AS plan_name,
                     s.status,
-                    s.created_at
+                    s.created_at,
+                    s.starts_at,
+                    s.expires_at
                 FROM subscriptions AS s
                 JOIN subscribers AS sub
                     ON s.subscriber_id = sub.id
@@ -720,9 +745,9 @@ def get_subscription(subscription_id):
                 "error": "Subscription not found."
             }), 404
 
-        subscription["created_at"] = (
-            subscription["created_at"].isoformat()
-        )
+        subscription["created_at"] = subscription["created_at"].isoformat()
+        subscription["starts_at"] = subscription["starts_at"].isoformat()
+        subscription["expires_at"] = subscription["expires_at"].isoformat()
 
         return jsonify(subscription), 200
 
@@ -797,14 +822,21 @@ def update_subscription_status(subscription_id):
                 UPDATE subscriptions
                 SET status = %s
                 WHERE id = %s
-                RETURNING id, subscriber_id, plan_id, status, created_at
+                RETURNING
+                    id,
+                    subscriber_id,
+                    plan_id,
+                    status,
+                    created_at,
+                    starts_at,
+                    expires_at
                 """,
                 (status, subscription_id),
             ).fetchone()
 
-        updated_subscription["created_at"] = (
-            updated_subscription["created_at"].isoformat()
-        )
+        updated_subscription["created_at"] = updated_subscription["created_at"].isoformat()
+        updated_subscription["starts_at"] = updated_subscription["starts_at"].isoformat()
+        updated_subscription["expires_at"] = updated_subscription["expires_at"].isoformat()
 
         return jsonify(updated_subscription), 200
 

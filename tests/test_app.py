@@ -692,17 +692,23 @@ class MakeWeYarnAPITests(unittest.TestCase):
 
         mock_cursor.fetchone.side_effect = [
             {"id": 1},
-            {"id": 1, "is_active": True},
+            {"id": 1, "is_active": True, "duration_days": 30},
             None,
             {
-                "id": 1,
-                "subscriber_id": 1,
-                "plan_id": 1,
-                "status": "active",
-                "created_at": datetime(
-                    2026, 10, 28, tzinfo=timezone.utc
-                ),
-            },
+    "id": 1,
+    "subscriber_id": 1,
+    "plan_id": 1,
+    "status": "active",
+    "created_at": datetime(
+        2026, 10, 28, tzinfo=timezone.utc
+    ),
+    "starts_at": datetime(
+        2026, 10, 28, tzinfo=timezone.utc
+    ),
+    "expires_at": datetime(
+        2026, 11, 27, tzinfo=timezone.utc
+    ),
+},
         ]
 
         response = self.client.post(
@@ -765,17 +771,23 @@ class MakeWeYarnAPITests(unittest.TestCase):
 
         mock_cursor.fetchone.side_effect = [
             {"id": 1},  # Subscriber exists
-            {"id": 1, "is_active": True},  # Plan is active
+            {"id": 1, "is_active": True, "duration_days": 30},  # Plan is active
             None,  # No active subscription exists
             {
-                "id": 2,
-                "subscriber_id": 1,
-                "plan_id": 1,
-                "status": "active",
-                "created_at": datetime(
-                    2026, 10, 30, tzinfo=timezone.utc
-                ),
-            },  # New subscription created
+    "id": 2,
+    "subscriber_id": 1,
+    "plan_id": 1,
+    "status": "active",
+    "created_at": datetime(
+        2026, 10, 30, tzinfo=timezone.utc
+    ),
+    "starts_at": datetime(
+        2026, 10, 30, tzinfo=timezone.utc
+    ),
+    "expires_at": datetime(
+        2026, 11, 29, tzinfo=timezone.utc
+    ),
+},  # New subscription created
         ]
 
         response = self.client.post(
@@ -948,9 +960,14 @@ class MakeWeYarnAPITests(unittest.TestCase):
                 "created_at": datetime(
                     2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
                 ),
+                "starts_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+                "expires_at": datetime(
+                    2026, 11, 27, 13, 25, 32, tzinfo=timezone.utc
+                ),
             }
         ]
-
         response = self.client.get("/subscriptions")
 
         self.assertEqual(response.status_code, 200)
@@ -969,7 +986,14 @@ class MakeWeYarnAPITests(unittest.TestCase):
             response.json[0]["created_at"],
             "2026-10-28T13:25:32+00:00",
         )
-
+        self.assertEqual(
+            response.json[0]["starts_at"],
+            "2026-10-28T13:25:32+00:00",
+)
+        self.assertEqual(
+            response.json[0]["expires_at"],
+            "2026-11-27T13:25:32+00:00",
+)
     @patch("app.app.get_db_connection")
     def test_get_subscriptions_database_error(
         self, mock_get_db_connection
@@ -1014,6 +1038,12 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "created_at": datetime(
                 2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
             ),
+            "starts_at": datetime(
+    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+),
+"expires_at": datetime(
+    2026, 11, 27, 13, 25, 32, tzinfo=timezone.utc
+),
         }
 
         response = self.client.get("/subscriptions/1")
@@ -1033,6 +1063,14 @@ class MakeWeYarnAPITests(unittest.TestCase):
             response.json["created_at"],
             "2026-10-28T13:25:32+00:00",
         )
+        self.assertEqual(
+            response.json["starts_at"],
+            "2026-10-28T13:25:32+00:00",
+)
+        self.assertEqual(
+            response.json["expires_at"],
+            "2026-11-27T13:25:32+00:00",
+)
 
     @patch("app.app.get_db_connection")
     def test_get_subscription_not_found(self, mock_get_db_connection):
@@ -1081,6 +1119,12 @@ class MakeWeYarnAPITests(unittest.TestCase):
                 "created_at": datetime(
                     2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
                 ),
+                "starts_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+                "expires_at": datetime(
+                    2026, 11, 27, 13, 25, 32, tzinfo=timezone.utc
+                ),
             },
         ]
 
@@ -1092,9 +1136,18 @@ class MakeWeYarnAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["id"], 1)
         self.assertEqual(response.json["status"], "cancelled")
+
         self.assertEqual(
             response.json["created_at"],
             "2026-10-28T13:25:32+00:00",
+        )
+        self.assertEqual(
+            response.json["starts_at"],
+            "2026-10-28T13:25:32+00:00",
+        )
+        self.assertEqual(
+            response.json["expires_at"],
+            "2026-11-27T13:25:32+00:00",
         )
 
         self.assertEqual(mock_conn.execute.call_count, 2)
@@ -1162,9 +1215,14 @@ class MakeWeYarnAPITests(unittest.TestCase):
                 "created_at": datetime(
                     2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
                 ),
+                "starts_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+                "expires_at": datetime(
+                    2026, 11, 27, 13, 25, 32, tzinfo=timezone.utc
+                ),
             },
         ]
-
         response = self.client.patch(
             "/subscriptions/1/status",
             json={"status": "active"},
