@@ -755,6 +755,45 @@ def update_subscription_status(subscription_id):
         with get_db_connection() as conn:
             subscription = conn.execute(
                 """
+                SELECT id, subscriber_id, plan_id, status
+                FROM subscriptions
+                WHERE id = %s
+                """,
+                (subscription_id,),
+            ).fetchone()
+
+            if subscription is None:
+                return jsonify({
+                    "error": "Subscription not found."
+                }), 404
+
+            if status == "active":
+                existing_subscription = conn.execute(
+                    """
+                    SELECT id
+                    FROM subscriptions
+                    WHERE subscriber_id = %s
+                      AND plan_id = %s
+                      AND status = 'active'
+                      AND id <> %s
+                    """,
+                    (
+                        subscription["subscriber_id"],
+                        subscription["plan_id"],
+                        subscription_id,
+                    ),
+                ).fetchone()
+
+                if existing_subscription is not None:
+                    return jsonify({
+                        "error": (
+                            "Another active subscription already exists "
+                            "for this subscriber and plan."
+                        )
+                    }), 409
+
+            updated_subscription = conn.execute(
+                """
                 UPDATE subscriptions
                 SET status = %s
                 WHERE id = %s
@@ -763,16 +802,11 @@ def update_subscription_status(subscription_id):
                 (status, subscription_id),
             ).fetchone()
 
-        if subscription is None:
-            return jsonify({
-                "error": "Subscription not found."
-            }), 404
-
-        subscription["created_at"] = (
-            subscription["created_at"].isoformat()
+        updated_subscription["created_at"] = (
+            updated_subscription["created_at"].isoformat()
         )
 
-        return jsonify(subscription), 200
+        return jsonify(updated_subscription), 200
 
     except psycopg.Error:
         app.logger.exception("Failed to update subscription status")

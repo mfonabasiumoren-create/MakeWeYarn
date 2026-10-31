@@ -1066,15 +1066,23 @@ class MakeWeYarnAPITests(unittest.TestCase):
         mock_get_db_connection.return_value.__enter__.return_value = mock_conn
         mock_conn.execute.return_value = mock_cursor
 
-        mock_cursor.fetchone.return_value = {
-            "id": 1,
-            "subscriber_id": 1,
-            "plan_id": 1,
-            "status": "cancelled",
-            "created_at": datetime(
-                2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
-            ),
-        }
+        mock_cursor.fetchone.side_effect = [
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "active",
+            },
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "cancelled",
+                "created_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+            },
+        ]
 
         response = self.client.patch(
             "/subscriptions/1/status",
@@ -1089,6 +1097,88 @@ class MakeWeYarnAPITests(unittest.TestCase):
             "2026-10-28T13:25:32+00:00",
         )
 
+        self.assertEqual(mock_conn.execute.call_count, 2)
+    @patch("app.app.get_db_connection")
+    def test_update_subscription_status_reactivation_conflict(
+        self, mock_get_db_connection
+    ):
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.side_effect = [
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "cancelled",
+            },
+            {"id": 3},
+        ]
+
+        response = self.client.patch(
+            "/subscriptions/1/status",
+            json={"status": "active"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json["error"],
+            "Another active subscription already exists "
+            "for this subscriber and plan.",
+        )
+
+        self.assertEqual(mock_conn.execute.call_count, 2)
+    @patch("app.app.get_db_connection")
+    def test_update_subscription_status_reactivation_success(
+        self, mock_get_db_connection
+    ):
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchone.side_effect = [
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "cancelled",
+            },
+            None,
+            {
+                "id": 1,
+                "subscriber_id": 1,
+                "plan_id": 1,
+                "status": "active",
+                "created_at": datetime(
+                    2026, 10, 28, 13, 25, 32, tzinfo=timezone.utc
+                ),
+            },
+        ]
+
+        response = self.client.patch(
+            "/subscriptions/1/status",
+            json={"status": "active"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["id"], 1)
+        self.assertEqual(response.json["status"], "active")
+        self.assertEqual(
+            response.json["created_at"],
+            "2026-10-28T13:25:32+00:00",
+        )
+
+        self.assertEqual(mock_conn.execute.call_count, 3)
     @patch("app.app.get_db_connection")
     def test_update_subscription_status_invalid(
         self, mock_get_db_connection
