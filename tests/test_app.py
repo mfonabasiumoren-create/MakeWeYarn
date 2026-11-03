@@ -1334,7 +1334,7 @@ class MakeWeYarnAPITests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             response.json["error"],
-            "status must be either 'active' or 'cancelled'.",
+            "status must be either 'active', 'cancelled', or 'expired'.",
         )
 
         mock_get_db_connection.assert_not_called()

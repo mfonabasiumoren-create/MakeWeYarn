@@ -666,9 +666,15 @@ def get_subscriptions():
             "error": "offset cannot be negative."
         }), 400
 
-    if status is not None and status not in ("active", "cancelled"):
+    if status is not None and status not in (
+        "active",
+        "cancelled",
+        "expired",
+    ):
         return jsonify({
-            "error": "status must be either 'active' or 'cancelled'."
+            "error": (
+                "status must be either 'active', 'cancelled', or 'expired'."
+            )
         }), 400
 
     try:
@@ -756,7 +762,128 @@ def get_subscription(subscription_id):
         return jsonify({
             "error": "Unable to retrieve subscription."
         }), 500
+@app.route(
+    "/subscriptions/<int:subscription_id>/renew",
+    methods=["POST"],
+)
+def renew_subscription(subscription_id):
+    try:
+        with get_db_connection() as conn:
+            # Retrieve the original subscription and its plan details.
+            subscription = conn.execute(
+                """
+                SELECT
+                    s.id,
+                    s.subscriber_id,
+                    s.plan_id,
+                    s.status,
+                    p.duration_days,
+                    p.is_active AS plan_is_active
+                FROM subscriptions AS s
+                JOIN plans AS p
+                    ON s.plan_id = p.id
+                WHERE s.id = %s
+                """,
+                (subscription_id,),
+            ).fetchone()
 
+            if subscription is None:
+                return jsonify({
+                    "error": "Subscription not found."
+                }), 404
+
+            # Only expired or cancelled subscriptions can be renewed.
+            if subscription["status"] == "active":
+                return jsonify({
+                    "error": "An active subscription cannot be renewed."
+                }), 409
+
+            # Ensure the original service plan is still available.
+            if not subscription["plan_is_active"]:
+                return jsonify({
+                    "error": "Cannot renew an inactive service plan."
+                }), 400
+
+            # Prevent duplicate active subscriptions.
+            existing_subscription = conn.execute(
+                """
+                SELECT id
+                FROM subscriptions
+                WHERE subscriber_id = %s
+                  AND plan_id = %s
+                  AND status = 'active'
+                """,
+                (
+                    subscription["subscriber_id"],
+                    subscription["plan_id"],
+                ),
+            ).fetchone()
+
+            if existing_subscription is not None:
+                return jsonify({
+                    "error": (
+                        "An active subscription already exists "
+                        "for this subscriber and plan."
+                    )
+                }), 409
+
+            # Create a new subscription while preserving the old record.
+            renewed_subscription = conn.execute(
+                """
+                INSERT INTO subscriptions (
+                    subscriber_id,
+                    plan_id,
+                    starts_at,
+                    expires_at
+                )
+                VALUES (
+                    %s,
+                    %s,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP + (%s * INTERVAL '1 day')
+                )
+                RETURNING
+                    id,
+                    subscriber_id,
+                    plan_id,
+                    status,
+                    created_at,
+                    starts_at,
+                    expires_at
+                """,
+                (
+                    subscription["subscriber_id"],
+                    subscription["plan_id"],
+                    subscription["duration_days"],
+                ),
+            ).fetchone()
+
+        renewed_subscription["created_at"] = (
+            renewed_subscription["created_at"].isoformat()
+        )
+        renewed_subscription["starts_at"] = (
+            renewed_subscription["starts_at"].isoformat()
+        )
+        renewed_subscription["expires_at"] = (
+            renewed_subscription["expires_at"].isoformat()
+        )
+
+        return jsonify({
+            "message": "Subscription renewed successfully.",
+            "subscription": renewed_subscription,
+        }), 201
+
+    except psycopg.errors.UniqueViolation:
+        app.logger.exception("Duplicate active subscription during renewal")
+        return jsonify({
+            "error": "An active subscription already exists for this subscriber and plan."
+        }), 409
+
+    except psycopg.Error:
+        app.logger.exception("Failed to renew subscription")
+        return jsonify({
+            "error": "Unable to renew subscription."
+        }), 500
 @app.route(
     "/subscriptions/<int:subscription_id>/status",
     methods=["PATCH"],
