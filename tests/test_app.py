@@ -1338,6 +1338,50 @@ class MakeWeYarnAPITests(unittest.TestCase):
         )
 
         mock_get_db_connection.assert_not_called()
+    @patch("app.app.get_db_connection")
+    def test_expire_subscriptions_success(self, mock_get_db_connection):
+        from unittest.mock import MagicMock
 
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+
+        mock_get_db_connection.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.return_value = mock_cursor
+
+        mock_cursor.fetchall.return_value = [
+            {"id": 4},
+        ]
+
+        response = self.client.post("/subscriptions/expire")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json["message"],
+            "Subscription expiry processing completed.",
+        )
+        self.assertEqual(response.json["expired_count"], 1)
+        self.assertEqual(
+            response.json["expired_subscription_ids"],
+            [4],
+        )
+
+        mock_conn.execute.assert_called_once()
+    @patch("app.app.get_db_connection")
+    def test_expire_subscriptions_database_error(
+        self, mock_get_db_connection
+    ):
+        import psycopg
+
+        mock_get_db_connection.side_effect = psycopg.Error(
+            "Database connection failed"
+        )
+
+        response = self.client.post("/subscriptions/expire")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json["error"],
+            "Unable to process subscription expiry.",
+)
 if __name__ == "__main__":
     unittest.main()

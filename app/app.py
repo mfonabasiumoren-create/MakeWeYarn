@@ -845,6 +845,33 @@ def update_subscription_status(subscription_id):
         return jsonify({
             "error": "Unable to update subscription status."
         }), 500
+@app.route("/subscriptions/expire", methods=["POST"])
+def expire_subscriptions():
+    try:
+        with get_db_connection() as conn:
+            expired_subscriptions = conn.execute(
+                """
+                UPDATE subscriptions
+                SET status = 'expired'
+                WHERE status = 'active'
+                  AND expires_at <= CURRENT_TIMESTAMP
+                RETURNING id
+                """
+            ).fetchall()
 
+        return jsonify({
+            "message": "Subscription expiry processing completed.",
+            "expired_count": len(expired_subscriptions),
+            "expired_subscription_ids": [
+                subscription["id"]
+                for subscription in expired_subscriptions
+            ],
+        }), 200
+
+    except psycopg.Error:
+        app.logger.exception("Failed to process subscription expiry")
+        return jsonify({
+            "error": "Unable to process subscription expiry."
+        }), 500
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
