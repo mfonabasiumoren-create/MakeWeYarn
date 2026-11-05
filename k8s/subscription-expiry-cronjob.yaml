@@ -38,6 +38,7 @@ spec:
                 - /bin/sh
                 - -c
                 - |
+                  set -e
                   echo "Starting subscription expiry processing..."
                   curl --fail-with-body --show-error --silent \
                     --request POST \
