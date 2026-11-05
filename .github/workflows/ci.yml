@@ -1,0 +1,45 @@
+name: MakeWeYarn CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install PyYAML
+
+      - name: Compile application
+        run: |
+          python -m py_compile app/app.py
+
+      - name: Run automated tests
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Validate Kubernetes manifests
+        run: |
+          python -c "import yaml, pathlib; files = list(pathlib.Path('k8s').glob('*.yaml')); [list(yaml.safe_load_all(f.read_text())) for f in files]; print(f'Validated {len(files)} Kubernetes YAML files')"
+
+      - name: Build Docker image
+        run: |
+          docker build -f docker/Dockerfile -t makeweyarn-api:ci .
