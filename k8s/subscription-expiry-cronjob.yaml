@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: makeweyarn-subscription-expiry
+  namespace: makeweyarn
+  labels:
+    app: makeweyarn
+
+spec:
+  schedule: "0 0 * * *"
+  timeZone: "Africa/Lagos"
+
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+
+      template:
+        metadata:
+          labels:
+            app: makeweyarn-expiry-job
+
+        spec:
+          restartPolicy: Never
+
+          containers:
+            - name: expiry-processor
+              image: curlimages/curl:latest
+              imagePullPolicy: IfNotPresent
+
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "Starting subscription expiry processing..."
+                  curl --fail-with-body --show-error --silent \
+                    --request POST \
+                    --max-time 60 \
+                    http://makeweyarn-api:8001/subscriptions/expire
+                  echo "Subscription expiry processing completed."

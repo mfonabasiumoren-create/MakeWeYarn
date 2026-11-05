@@ -1,0 +1,33 @@
+# Git files
+.git
+.gitignore
+
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Test files
+tests/
+.pytest_cache/
+
+# Documentation
+docs/
+README.md
+
+# Kubernetes manifests
+k8s/
+
+# Local development files
+.vscode/
+.idea/
+
+# Docker configuration directory
+docker/

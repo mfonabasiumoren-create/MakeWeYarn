@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: makeweyarn-api
+  namespace: makeweyarn
+  labels:
+    app: makeweyarn-api
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: makeweyarn-api
+
+  template:
+    metadata:
+      labels:
+        app: makeweyarn-api
+
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: api
+          image: makeweyarn-api:v1
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8001
+              name: http
+
+          env:
+            - name: DB_HOST
+              value: host.docker.internal
+
+            - name: DB_PORT
+              value: "5434"
+
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: makeweyarn-db-secret
+                  key: DB_NAME
+
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: makeweyarn-db-secret
+                  key: DB_USER
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: makeweyarn-db-secret
+                  key: DB_PASSWORD
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+            - name: gunicorn-socket
+              mountPath: /home/appuser/.gunicorn
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            failureThreshold: 30
+            periodSeconds: 5
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            periodSeconds: 20
+
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+
+        - name: gunicorn-socket
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi
